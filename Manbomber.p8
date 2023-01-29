@@ -726,33 +726,21 @@ function _playerComponent:update()
 end
 
 function _playerComponent:handleInput()
-    local id,dir = self.id, self.direction
+    local id = self.id
     local accel = self.speed
-    local animation = idles[self.direction + 1]
     if (btn(0, id)) then
-         self.dx -= accel 
-         animation = "SideWalk"
-         self.sprite.flipped_x = true
-         dir = 0
-    elseif (btn(1, id)) then
+         self.dx -= accel
+    end
+    if (btn(1, id)) then
         self.dx += accel
-        animation = "SideWalk"
-        self.sprite.flipped_x = false
-        dir = 1
-    elseif (btn(2, id)) then 
+    end
+    if (btn(2, id)) then 
         self.dy -= accel
-        animation = "UpWalk"
-        dir = 2
-    elseif (btn(3, id)) then
+    end
+    if (btn(3, id)) then
         self.dy += accel
-        animation = "DownWalk"
-        dir = 3
     end
     if (btnp(5, id)) self:tryDropBomb()
-    if not (self.animator.currentAnim == animation) then 
-        self.animator:setAnimation(animation)
-    end
-    self.direction = dir
 end
 
 function _playerComponent:tryDropBomb()
@@ -779,42 +767,73 @@ function _playerComponent:handleCollision()
         return
     end
     local isOnBomb = self:isOnOwnBomb()
+    local vx,vy = 0, 0
     if dx != 0 then
         local xdir
         if (dx > 0) xdir = "right" else xdir = "left"
         local result, isOnSameCell = collides_tile(x + dx, y, 3, 3, xdir), isOnSameCell(x + dx, y, 3, 3, xdir)
         if result > 0 or (isOnBomb and isOnSameCell) then
-            local x,y = dx,0
+            vx = dx
             if not (isOnBomb and isOnSameCell) then
-                x = result == 3 and dx or dx / 3
-                if result == 1 then y = -dx elseif result == 2 then y = dx end
+                vx = result == 3 and dx or 0
+                if dy == 0 then -- only help the player if he does not press two direction keys at the same time
+                    if result == 1 then vy = -dx elseif result == 2 then vy = dx end
+                end
             end
-            self.transform.x += x
-            self.transform.y += y
         elseif self.canPush then
             oldCell.x += sgn(dx)
             local b = currentScene:getBombAtCell(oldCell)
             if (b) b:push(xdir)
         end
-    elseif dy != 0 then
-        x = self.transform.x
+    end
+    if dy != 0 then
         local ydir
         if (dy > 0) ydir = "down" else ydir = "up"
-        local result, isOnSameCell = collides_tile(x, y + dy, 3, 3, ydir), isOnSameCell(x, y + dy, 3, 3, ydir)
+        local result, isOnSameCell = collides_tile(x + vx, y + dy, 3, 3, ydir), isOnSameCell(x + vx, y + dy, 3, 3, ydir)
         if result > 0  or (isOnBomb and isOnSameCell) then 
-            local x,y = 0,dy
+            vy = dy
             if not (isOnBomb and isOnSameCell) then
-                y = result == 3 and dy or dy/3
-                if result == 1 then x = -dy elseif result == 2 then x = dy end
+                vy = result == 3 and dy or 0
+                if dx == 0 then -- only help the player if he does not press two direction keys at the same time
+                    if result == 1 then vx = -dy elseif result == 2 then vx = dy end
+                end
             end
-            self.transform.x += x
-            self.transform.y += y
         elseif self.canPush then
             oldCell.y += sgn(dy)
             local b = currentScene:getBombAtCell(oldCell)
             if (b) b:push(ydir)
         end
     end
+
+    self.transform.x += vx
+    self.transform.y += vy
+
+    if vx == 0 and vy == 0 then
+        -- if we don't move, at least look in the direction the player tried to go
+        vx,vy = dx,dy
+    end
+    
+    local animation = idles[self.direction + 1]         
+    if vx < 0 then
+        animation = "SideWalk"
+        self.direction = 0
+        self.sprite.flipped_x = true
+    elseif vx > 0 then
+        animation = "SideWalk"
+        self.direction = 1
+        self.sprite.flipped_x = false
+    elseif vy < 0 then
+        animation = "UpWalk"
+        self.direction = 2
+    elseif vy > 0 then
+        animation = "DownWalk"
+        self.direction = 3
+    end
+  
+    if not (self.animator.currentAnim == animation) then 
+        self.animator:setAnimation(animation)
+    end
+
     self:checkForItems()
     self.dx, self.dy = 0,0
 end
